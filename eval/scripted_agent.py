@@ -3,6 +3,7 @@
                 api_base="http://127.0.0.1:8000", verbose=False) -> RunRecord (as a dict)
 
 """
+import time
 import json
 import re
 import urllib.request
@@ -47,7 +48,7 @@ def _as_dict(email):
 
 
 def run_episode(task_id, guard_enabled, attack_id=None, extra_emails=None, experiment=None,
-                api_base="http://127.0.0.1:8000", verbose=False):
+                api_base="http://127.0.0.1:8000", verbose=False, step_delay = 0.0):
     extra_emails = [_as_dict(e) for e in (extra_emails or [])]
     start = _post(f"{api_base}/runs", {
         "task_id": task_id, "guard_enabled": guard_enabled, "attack_id": attack_id,
@@ -63,10 +64,14 @@ def run_episode(task_id, guard_enabled, attack_id=None, extra_emails=None, exper
     calls += [(tool, args, "user", None) for tool, args in TASK_CALLS.get(task_id, [])]
 
     for step, (tool, args, provenance, source) in enumerate(calls, start=1):
+        if step_delay:
+            time.sleep(step_delay)
         _post(f"{api_base}/tool_call", {
             "run_id": run_id, "step": step, "user_request": request, "tool_name": tool,
             "args": args, "provenance": provenance, "source_text": source,
         })
+    if step_delay:
+        time.sleep(step_delay)
     record = _post(f"{api_base}/runs/{run_id}/finish", {})
     if verbose:
         print(record)

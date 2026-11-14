@@ -134,13 +134,18 @@ def list_runs(limit: int = 100, experiment: Optional[str] = None) -> list[dict]:
     return [_run_row(r) for r in rows]
 
 
-def list_tool_calls(run_id: Optional[str] = None, since_id: int = 0, limit: int = 200) -> list[dict]:
+def list_tool_calls(run_id: Optional[str] = None, since_id: int = 0, limit: int = 200,
+                    experiment: Optional[str] = None) -> list[dict]:
     """since_id lets the dashboard poll for only new rows."""
-    q, params = "SELECT * FROM tool_calls WHERE id > ?", [since_id]
+    q = "SELECT t.* FROM tool_calls t JOIN runs r ON r.run_id = t.run_id WHERE t.id > ?"
+    params = [since_id]
     if run_id:
-        q += " AND run_id = ?"
+        q += " AND t.run_id = ?"
         params.append(run_id)
-    q += " ORDER BY id DESC LIMIT ?"
+    if experiment:
+        q += " AND r.experiment = ?"
+        params.append(experiment)
+    q += " ORDER BY t.id DESC LIMIT ?"
     params.append(limit)
     with connect() as conn:
         rows = conn.execute(q, params).fetchall()
@@ -165,12 +170,11 @@ def stats(experiment: Optional[str] = None) -> dict:
       COUNT(*)                                                         AS runs,
       SUM(CASE WHEN attack_id IS NOT NULL THEN 1 ELSE 0 END)           AS attack_runs,
       SUM(CASE WHEN attack_id IS NOT NULL AND attack_succeeded=1 THEN 1 ELSE 0 END) AS attacks_succeeded,
-      SUM(task_succeeded)                                              AS tasks_succeeded,
       SUM(CASE WHEN attack_id IS NULL THEN 1 ELSE 0 END)               AS benign_runs,
       SUM(CASE WHEN attack_id IS NULL AND task_succeeded=1 THEN 1 ELSE 0 END) AS benign_tasks_succeeded
     FROM runs WHERE {where}
     GROUP BY guard_enabled
-    """
+    """.format(where=where)
     with connect() as conn:
         rows = conn.execute(q, params).fetchall()
         blocked = dict(conn.execute(
@@ -188,9 +192,10 @@ def stats(experiment: Optional[str] = None) -> dict:
         out[key] = {
             "runs": r["runs"],
             "attack_runs": r["attack_runs"],
+            "attacks_succeeded": r["attacks_succeeded"],
             "attack_success_rate": rate(r["attacks_succeeded"], r["attack_runs"]),
-            "task_success_rate": rate(r["tasks_succeeded"], r["runs"]),
             "benign_runs": r["benign_runs"],
+            "benign_tasks_succeeded": r["benign_tasks_succeeded"],
             "benign_task_success_rate": rate(r["benign_tasks_succeeded"], r["benign_runs"]),
             "calls_blocked": blocked.get(r["guard_enabled"], 0),
         }

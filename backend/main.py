@@ -28,10 +28,9 @@ from env.tools import execute
 try:
     from guard.guard import check as guard_check
     GUARD_SOURCE = "guard.guard"
-except ImportError:
-    def guard_check(tool_call: ToolCall) -> Decision:
-        return Decision(decision="allow", reason="stub guard (guard/guard.py not found)")
-    GUARD_SOURCE = "stub"
+except ModuleNotFoundError as e:
+    if e.name not in ("guard", "guard.guard"):
+        raise 
 
 
 def run_guard(tc: ToolCall) -> Decision:
@@ -150,10 +149,11 @@ def run_detail(run_id: str):
 
 
 @app.get("/logs")
-def logs(run_id: Optional[str] = None, since_id: int = 0, limit: int = 200):
-    return db.list_tool_calls(run_id=run_id, since_id=since_id, limit=limit)
+def logs(run_id: Optional[str] = None, since_id: int = 0, limit: int = 200,
+        experiment: Optional[str] = None):
+    return db.list_tool_calls(run_id=run_id, since_id=since_id, limit=limit, experiment=experiment)
 
 
 @app.get("/stats")
 def get_stats(experiment: Optional[str] = None):
-    return db.stats()
+    return db.stats(experiment)
