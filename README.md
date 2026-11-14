@@ -4,7 +4,7 @@
 
 Built at HackUMass XIV by Mariia Palamarchuk and Soniya Ivkovic.
 
-Live dashboard: `[http://<SERVER_IP>:8000/dashboard/](http://149.28.225.254:8000/dashboard/)` 
+**Live dashboard:** [149.28.225.254:8000/dashboard](http://149.28.225.254:8000/dashboard/)
 
 ## Table of contents
 
