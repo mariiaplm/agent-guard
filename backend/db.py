@@ -70,7 +70,8 @@ def init_db() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_runs_experiment ON runs(experiment)")
 
 # writes
-def insert_run(run_id: str, task_id: str, attack_id: Optional[str], guard_enabled: bool, experiment: Optional[str] = None) -> None:
+def insert_run(run_id: str, task_id: str, attack_id: Optional[str], guard_enabled: bool, 
+    experiment: Optional[str] = None) -> None:
     with connect() as conn:
         conn.execute(
             "INSERT INTO runs (run_id, task_id, attack_id, guard_enabled, experiment, started_at) "

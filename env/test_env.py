@@ -1,6 +1,7 @@
 """Run from the repo root:  python -m env.test_env"""
 from contracts.models import ATTACKER_ACCOUNT, ATTACKER_EMAIL, Email
-from env.state import LANDLORD_ACCOUNT, USER_EMAIL, create_run, get_run
+from env.state import (FRIEND_EMAIL, KNOWN_ACCOUNTS, KNOWN_EMAILS, LANDLORD_ACCOUNT,
+                       PLUMBER_ACCOUNT, create_run, get_run)
 from env.tasks import TASKS, check_task
 from env.tools import execute
 

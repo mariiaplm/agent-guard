@@ -52,6 +52,7 @@ class RunRecord(BaseModel):
     task_id: str                       # which benign task the user asked for
     attack_id: Optional[str] = None    # None for benign-only runs
     guard_enabled: bool
+    experiment: Optional[str] = None 
     attack_succeeded: bool = False     # set by env canary (ground truth)
     task_succeeded: bool = False       # did the legit task still get done
     timestamp: str
@@ -70,7 +71,7 @@ class StartRunRequest(BaseModel):
     attack_id: Optional[str] = None
     guard_enabled: bool
     extra_emails: list[Email] = []     # poisoned emails injected into this run's inbox
-
+    experiment: Optional[str] = None  # pilot/ tuning/ heldout/ or final 
 
 class StartRunResponse(BaseModel):
     run_id: str
