@@ -1,6 +1,7 @@
 // AgentGuard dashboard logic: polling the backend and rendering the page
-const API = new URLSearchParams(location.search).get("api") || "http://localhost:8000";
-const LOG_POLL_MS = 1500, STATS_POLL_MS = 3000, MAX_ROWS = 500;
+// Served by the backend (http://SERVER:8000/dashboard/)? Use that server. Opened as a file? Use localhost.
+const API = new URLSearchParams(location.search).get("api")
+  || (location.pathname.startsWith("/dashboard") ? location.origin : "http://localhost:8000");const LOG_POLL_MS = 1500, STATS_POLL_MS = 3000, MAX_ROWS = 500;
 
 let experiment = "";
 let paused = false, lastLogId = 0, logs = [], onlyBlocked = false, runFilter = null, query = "";

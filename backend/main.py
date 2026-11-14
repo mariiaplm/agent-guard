@@ -4,12 +4,16 @@ Run from the repo root:
     uvicorn backend.main:app --reload --port 8000
 Docs (try endpoints in the browser):  http://localhost:8000/docs
 """
+import os
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from backend import db
 from contracts.models import (
@@ -54,9 +58,16 @@ app.add_middleware(  # so the dashboard can call the API from the browser
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
 
+# On a public server, anyone can view the dashboard, but only
+# the server itself can start runs or send tool calls
+LOCAL_WRITES_ONLY = os.environ.get("AGENTGUARD_LOCAL_WRITES") == "1"
+
+def writes_allowed(request: Request):
+    if LOCAL_WRITES_ONLY and (request.client is None or request.client.host not in ("127.0.0.1", "::1")):
+        raise HTTPException(403, "This server is read-only from outside. Run the agent on the server itself.")
 
 # agent-facing
-@app.post("/runs", response_model=StartRunResponse)
+@app.post("/runs", response_model=StartRunResponse, dependencies=[Depends(writes_allowed)])
 def start_run(req: StartRunRequest):
     if req.task_id not in TASKS:
         raise HTTPException(404, f"Unknown task_id {req.task_id!r}. Options: {list(TASKS)}")
@@ -66,7 +77,7 @@ def start_run(req: StartRunRequest):
     return StartRunResponse(run_id=run_id, user_request=TASKS[req.task_id].user_request)
 
 
-@app.post("/tool_call", response_model=ToolCallResponse)
+@app.post("/tool_call", response_model=ToolCallResponse, dependencies=[Depends(writes_allowed)])
 def tool_call(tc: ToolCall):
     run = db.get_run(tc.run_id)
     if run is None:
@@ -100,7 +111,7 @@ def tool_call(tc: ToolCall):
     return ToolCallResponse(decision=decision, executed=executed, result=result_for_agent)
 
 
-@app.post("/runs/{run_id}/finish", response_model=RunRecord)
+@app.post("/runs/{run_id}/finish", response_model=RunRecord, dependencies=[Depends(writes_allowed)])
 def finish(run_id: str):
     run = db.get_run(run_id)
     if run is None:
@@ -157,3 +168,13 @@ def logs(run_id: Optional[str] = None, since_id: int = 0, limit: int = 200,
 @app.get("/stats")
 def get_stats(experiment: Optional[str] = None):
     return db.stats(experiment)
+
+# Serve the dashboard from the backend, so one URL has both: http://SERVER:8000/
+DASHBOARD_DIR = Path(__file__).resolve().parent.parent / "dashboard"
+if DASHBOARD_DIR.exists():
+    app.mount("/dashboard", StaticFiles(directory=DASHBOARD_DIR, html=True), name="dashboard")
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse("/dashboard/")
