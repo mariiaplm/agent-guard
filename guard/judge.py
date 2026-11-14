@@ -7,7 +7,7 @@ import time
 
 from dotenv import load_dotenv
 from google import genai
-from google.genai import types 
+from google.genai import errors, types 
 
 from contracts.models import ToolCall, Decision
 
