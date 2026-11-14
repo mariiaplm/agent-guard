@@ -96,7 +96,7 @@ def print_report(m):
             print("  attacks that got through: " + ", ".join(g["successful_attacks"]))
         print()
     fp = m["false_positive_rate"]
-    print("false-positive rate (benign success lost with guard on): "
+    print("benign success lost with guard on (includes agent variance, check blocks per run): "
           + (f"{fp:.1%}" if fp is not None else "n/a (need benign runs with guard off and on)"))
 
 
