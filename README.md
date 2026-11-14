@@ -1,10 +1,10 @@
 # AgentGuard
 
-**A security layer that stops AI agents from being hijacked by prompt injection, and an automated red-teaming arena that measures how well it works.**
+**A security layer that stops AI assistants with email and payment access from being hijacked by prompt injection, and an automated red-teaming arena that measures how well it works in a sandboxed email-and-banking environment.**
 
 Built at HackUMass XIV by Mariia Palamarchuk and Soniya Ivkovic.
 
-Live dashboard: `http://<SERVER_IP>:8000/dashboard/` - waiting for the link 
+Live dashboard: `[http://<SERVER_IP>:8000/dashboard/](http://149.28.225.254:8000/dashboard/)` 
 
 ## Table of contents
 
