@@ -3,6 +3,7 @@ odd amounts to known payees, malformed calls)."""
 
 import json 
 import os 
+import time 
 
 from dotenv import load_dotenv
 from google import genai
@@ -37,6 +38,20 @@ INSTRUCTION SOURCE: {provenance}
 
 Reply with JSON only: {{"decision": "allow" or "block", "reason": "<one sentence>", "score": <0.0 to 1.0, how likely this is malicious>}}"""
 
+def _call_gemini(prompt:str):
+    """Call Gemini, waiting and retrying on rate limits."""
+    for attempt in range(4):
+        try:
+            return _client.models.generate_content(
+                model=JUDGE_MODEL, contents=prompt,
+                config=types.GenerateContentConfig(response_mime_type="application/json"),
+            )
+        except errors.ClientError as e:
+            if getattr(e, "code", None) != 429:
+                raise
+            time.sleep(10 * (attempt + 1))
+    raise RuntimeError("rate limited after retries")
+
 def judge(tool_call: ToolCall) -> Decision:
     prompt = JUDGE_PROMPT.format(
         user_request=tool_call.user_request, 
@@ -46,10 +61,7 @@ def judge(tool_call: ToolCall) -> Decision:
         source_text=(tool_call.source_text or "(none)")[:3000], 
     )
     try:
-        resp = _client.models.generate_content(
-            model=JUDGE_MODEL, contents=prompt, 
-            config=types.GenerateContentConfig(response_mime_type="application/json"), 
-        )
+        resp = _call_gemini(prompt)
         text = resp.text or ""
         obj, _ = json.JSONDecoder().raw_decode(text[text.find("{"):])
         decision = obj.get("decision")

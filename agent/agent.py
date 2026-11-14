@@ -33,7 +33,11 @@ def call_llm(prompt: str, retries: int = 4) -> str:
     for attempt in range(retries):
         try:
             return client.models.generate_content(model=MODEL, contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json")).text
-        except errors.ClientError:
+        except errors.ClientError as e:
+            if getattr(e, "code", None) == 429:
+                print(f" rate limited, waiting... retry {attempt + 1}")
+                time.sleep(10 * (attempt + 1))
+                continue
             raise                      
         except Exception as e:
             print(f"  Gemini slow/busy ({type(e).__name__}), retry {attempt + 1}...")
