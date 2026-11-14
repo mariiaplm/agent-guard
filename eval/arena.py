@@ -153,6 +153,68 @@ def run_job(job, agent_fn, api, experiment, retries):
     return {**{k: job[k] for k in ("key", "kind", "task_id", "guard_enabled", "attack_id", "attack_type")},
             "status": "error", "experiment": experiment, "error": last_err, "attempts": retries + 1}
 
+def summarize(path: Path) -> dict:
+    """Numbers for this experiment, from its own results file (one row per job).
+    attack rate = attack successes / attack runs; legit rate = task successes / benign runs."""
+    latest = {}
+    if path.exists():
+        for line in path.read_text().splitlines():
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if rec.get("status") == "ok":
+                latest[rec["key"]] = rec  # if a job appears twice, keep the latest
+    out = {}
+    for side, guard in (("guard_off", False), ("guard_on", True)):
+        rows = [r for r in latest.values() if r["guard_enabled"] == guard]
+        atk = [r for r in rows if r["kind"] == "attack"]
+        ben = [r for r in rows if r["kind"] == "benign"]
+        by_type = {}
+        for r in atk:
+            t = by_type.setdefault(r.get("attack_type") or "unknown", [0, 0])
+            t[0] += r["attack_succeeded"]
+            t[1] += 1
+        out[side] = {
+            "attack_runs": len(atk), "attacks_succeeded": sum(r["attack_succeeded"] for r in atk),
+            "benign_runs": len(ben), "benign_tasks_succeeded": sum(r["task_succeeded"] for r in ben),
+            "by_type": by_type,
+        }
+    return out
+
+
+def frac(n, d):
+    return f"{n}/{d} ({n / d:.0%})" if d else "–"
+
+
+def print_summary(experiment: str, mine: dict, db: dict):
+    print(f"\n=== {experiment} ===")
+    print(f"{'':<11}{'attacks through':<22}{'legit tasks done':<22}")
+    for side in ("guard_off", "guard_on"):
+        m = mine[side]
+        print(f"{side:<11}{frac(m['attacks_succeeded'], m['attack_runs']):<22}"
+              f"{frac(m['benign_tasks_succeeded'], m['benign_runs']):<22}")
+    types = sorted(set(mine["guard_off"]["by_type"]) | set(mine["guard_on"]["by_type"]))
+    if types:
+        print("\nattacks through, by type:")
+        for t in types:
+            off = mine["guard_off"]["by_type"].get(t, [0, 0])
+            on = mine["guard_on"]["by_type"].get(t, [0, 0])
+            print(f"  {t:<18} guard off {frac(*off):<14} guard on {frac(*on)}")
+
+    # the dashboard reads /stats; make sure it shows the same numbers
+    mismatch = []
+    for side in ("guard_off", "guard_on"):
+        d = db.get(side, {})
+        for k in ("attack_runs", "attacks_succeeded", "benign_runs", "benign_tasks_succeeded"):
+            if (d.get(k) or 0) != mine[side][k]:
+                mismatch.append(f"{side}.{k}: results file {mine[side][k]}, database {d.get(k) or 0}")
+    if mismatch:
+        print("\nWarning: the database has different numbers for this label than the results file:")
+        for m in mismatch:
+            print("  " + m)
+        print("Usually this means other runs were saved under the same label (an earlier attempt,\n"
+              "another script, or retries). Use a fresh --experiment label for clean numbers.")
 
 #  main
 def main():
@@ -196,6 +258,13 @@ def main():
     out_path = RESULTS_DIR / f"{args.experiment}.jsonl"
     done = already_done(out_path)
     todo = [j for j in jobs if j["key"] not in done]
+
+    # warn if the database already holds runs under this label that this file doesn't know about
+    in_db = len(http_json(f"{args.api}/runs?experiment={args.experiment}&limit=100000"))
+    if in_db > len(done):
+        print(f"Warning: the database already has {in_db} runs labelled {args.experiment!r}, but "
+              f"{out_path} only has {len(done)}.\n         Those extra runs will be counted on the "
+              "dashboard. Use a new --experiment label for clean numbers.\n")
     print(f"{len(jobs)} jobs, {len(jobs) - len(todo)} already done, {len(todo)} to run "
           f"-> {out_path}\n")
 
@@ -223,13 +292,8 @@ def main():
 
     print(f"\ndone in {time.time() - started:.0f}s: {n_ok} ok, {n_err} errors "
           f"(re-run the same command to retry errors)")
-    stats = http_json(f"{args.api}/stats?experiment={args.experiment}")
-    for side in ("guard_off", "guard_on"):
-        s = stats.get(side)
-        if s:
-            print(f"{side:<9}  attacks through: {s['attack_success_rate']}  "
-                  f"legit tasks done: {s['benign_task_success_rate']}  blocked calls: {s['calls_blocked']}")
-
+    print_summary(args.experiment, summarize(out_path),
+                http_json(f"{args.api}/stats?experiment={args.experiment}"))
 
 if __name__ == "__main__":
     main()
