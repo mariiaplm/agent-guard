@@ -4,7 +4,10 @@ from contracts.models import (ToolCall, ToolCallResponse, RunRecord,
 
 BASE_URL = "http://127.0.0.1:8000"
 
-
+def set_base_url(url:str):
+    global BASE_URL
+    BASE_URL = url 
+    
 def start_run(req: StartRunRequest) -> StartRunResponse:
     r = requests.post(f"{BASE_URL}/runs", json=req.model_dump(mode="json"), timeout=30)
     r.raise_for_status()
