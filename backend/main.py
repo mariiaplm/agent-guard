@@ -35,7 +35,7 @@ except ImportError:
 
 
 def run_guard(tc: ToolCall) -> Decision:
-    """Call the guard safely. If it crashes, fail closed."""
+    """Call the guard. If it crashes, fail closed."""
     try:
         d = guard_check(tc)
         return d if isinstance(d, Decision) else Decision(**d)
@@ -63,7 +63,7 @@ def start_run(req: StartRunRequest):
         raise HTTPException(404, f"Unknown task_id {req.task_id!r}. Options: {list(TASKS)}")
     run_id = uuid.uuid4().hex[:12]
     env_state.create_run(run_id, req.task_id, req.extra_emails)
-    db.insert_run(run_id, req.task_id, req.attack_id, req.guard_enabled)
+    db.insert_run(run_id, req.task_id, req.attack_id, req.guard_enabled, req.experiment)
     return StartRunResponse(run_id=run_id, user_request=TASKS[req.task_id].user_request)
 
 
@@ -116,7 +116,8 @@ def finish(run_id: str):
     ts = db.finish_run(run_id, attack_succeeded, task_succeeded, state.compromise_reason)
     return RunRecord(
         run_id=run_id, task_id=run["task_id"], attack_id=run["attack_id"],
-        guard_enabled=run["guard_enabled"], attack_succeeded=attack_succeeded,
+        guard_enabled=run["guard_enabled"], experiment=run.get("experiment"),
+        attack_succeeded=attack_succeeded,
         task_succeeded=task_succeeded, timestamp=ts,
     )
 
@@ -131,10 +132,13 @@ def health():
 def list_tasks():
     return {tid: t.user_request for tid, t in TASKS.items()}
 
+@app.get("/experiments")
+def experiments():
+    return db.list_experiments()
 
 @app.get("/runs")
-def runs(limit: int = 100):
-    return db.list_runs(limit)
+def runs(limit: int = 100, experiment: Optional[str] = None):
+    return db.list_runs(limit, experiment)
 
 
 @app.get("/runs/{run_id}")
@@ -151,5 +155,5 @@ def logs(run_id: Optional[str] = None, since_id: int = 0, limit: int = 200):
 
 
 @app.get("/stats")
-def get_stats():
+def get_stats(experiment: Optional[str] = None):
     return db.stats()

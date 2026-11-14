@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS runs (
     run_id            TEXT PRIMARY KEY,
     task_id           TEXT NOT NULL,
     attack_id         TEXT,
+    experiment        TEXT,                             -- pilot | tuning | heldout | final
     guard_enabled     INTEGER NOT NULL,
     status            TEXT NOT NULL DEFAULT 'running',   -- running | finished
     attack_succeeded  INTEGER NOT NULL DEFAULT 0,
@@ -63,15 +64,19 @@ def init_db() -> None:
     with connect() as conn:
         conn.execute("PRAGMA journal_mode=WAL;")  # lets many runs write at once
         conn.executescript(SCHEMA)
-
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(runs)")}
+        if "experiment" not in cols:
+            conn.execute("ALTER TABLE runs ADD COLUMN experiment TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_runs_experiment ON runs(experiment)")
 
 # writes
-def insert_run(run_id: str, task_id: str, attack_id: Optional[str], guard_enabled: bool) -> None:
+def insert_run(run_id: str, task_id: str, attack_id: Optional[str], guard_enabled: bool, 
+    experiment: Optional[str] = None) -> None:
     with connect() as conn:
         conn.execute(
-            "INSERT INTO runs (run_id, task_id, attack_id, guard_enabled, started_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (run_id, task_id, attack_id, int(guard_enabled), now()),
+            "INSERT INTO runs (run_id, task_id, attack_id, guard_enabled, experiment, started_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (run_id, task_id, attack_id, int(guard_enabled), experiment, now()),
         )
 
 
@@ -108,12 +113,24 @@ def get_run(run_id: str) -> Optional[dict]:
         row = conn.execute("SELECT * FROM runs WHERE run_id=?", (run_id,)).fetchone()
     return _run_row(row) if row else None
 
-
-def list_runs(limit: int = 100) -> list[dict]:
+# returns the used labels, ordered by most recent 
+def list_experiments() -> list[str]:
     with connect() as conn:
         rows = conn.execute(
-            "SELECT * FROM runs ORDER BY started_at DESC LIMIT ?", (limit,)
+            "SELECT experiment, MAX(started_at) AS last FROM runs "
+            "WHERE experiment IS NOT NULL GROUP BY experiment ORDER BY last DESC"
         ).fetchall()
+    return [r["experiment"] for r in rows]
+
+def list_runs(limit: int = 100, experiment: Optional[str] = None) -> list[dict]:
+    q, params = "SELECT * FROM runs", []
+    if experiment:
+        q += " WHERE experiment = ?"
+        params.append(experiment)
+    q += " ORDER BY started_at DESC LIMIT ?"
+    params.append(limit)
+    with connect() as conn:
+        rows = conn.execute(q, params).fetchall()
     return [_run_row(r) for r in rows]
 
 
@@ -136,9 +153,13 @@ def list_tool_calls(run_id: Optional[str] = None, since_id: int = 0, limit: int 
     return out
 
 
-def stats() -> dict:
-    """Headline numbers, split by guard off / on. Only finished runs count."""
-    q = """
+def stats(experiment: Optional[str] = None) -> dict:
+    """Dashboard numbers, split by guard off / on. Only finished runs count."""
+    where, params = "status='finished'", []
+    if experiment:
+        where += " AND experiment = ?"
+        params.append(experiment)
+    q = f"""
     SELECT
       guard_enabled,
       COUNT(*)                                                         AS runs,
@@ -147,14 +168,14 @@ def stats() -> dict:
       SUM(task_succeeded)                                              AS tasks_succeeded,
       SUM(CASE WHEN attack_id IS NULL THEN 1 ELSE 0 END)               AS benign_runs,
       SUM(CASE WHEN attack_id IS NULL AND task_succeeded=1 THEN 1 ELSE 0 END) AS benign_tasks_succeeded
-    FROM runs WHERE status='finished'
+    FROM runs WHERE {where}
     GROUP BY guard_enabled
     """
     with connect() as conn:
-        rows = conn.execute(q).fetchall()
+        rows = conn.execute(q, params).fetchall()
         blocked = dict(conn.execute(
             "SELECT r.guard_enabled, COUNT(*) FROM tool_calls t JOIN runs r USING(run_id) "
-            "WHERE t.decision='block' GROUP BY r.guard_enabled"
+            "WHERE t.decision='block'" + (" AND r.experiment = ?" if experiment else "") + " GROUP BY r.guard_enabled", params
         ).fetchall())
 
     def rate(n, d):
