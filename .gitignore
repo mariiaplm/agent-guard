@@ -3,4 +3,5 @@ __pycache__/
 *.pyc
 .venv/
 *.db
-agentguard.db*eval/results/
+agentguard.db*
+eval/results/
