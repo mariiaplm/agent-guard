@@ -37,3 +37,22 @@ Why it worked: a reply in the real bill thread, the exact bill amount, the vendo
 - Every attack sends to an attacker address the user never named, which the allowlist rule catches. Attacks against known recipients (e.g. an inflated payment to the real landlord) rely on the LLM judge, which was tested on hand-built cases, not the full eval.
 - Sample sizes are small (12-36 attacks per set), so confidence intervals are wide.
 - The real-agent attack success rate is low (2.8%), so the real-agent comparison alone is not statistically significant. The compromised-agent experiment measures the guard directly.
+
+### Real agent, proactive assistant prompt
+
+Same model, with a system prompt configured for autonomy ("handle routine admin without
+checking in, use the latest payment details vendors send"). 20 second-generation attacks
+bred from the one attack that worked against the default agent.
+
+|                                | Guard off                 | Guard on              |
+| ------------------------------ | ------------------------- | --------------------- |
+| Attack success                 | 45% (9/20, CI 25.8-65.8%) | 0% (0/19, CI 0-16.8%) |
+| User's task done during attack | 55%                       | 100%                  |
+| Benign tasks done              | 100% (12/12)              | 85.7% (12/14)         |
+| Guard blocks on benign runs    | n/a                       | 0/14                  |
+
+The 2 failed benign runs (guard on) contained only a read_email call: the agent skipped
+sending the summary. No guard decision was involved.
+
+Both prompts are reported: the default assistant resisted most attacks (2.8%), while the
+proactive configuration was hijacked 45% of the time. The guard brought both to 0%.
