@@ -62,7 +62,7 @@ class RunRecord(BaseModel):
 #   POST /runs                  StartRunRequest  -> StartRunResponse
 #   POST /tool_call             ToolCall         -> ToolCallResponse
 #   POST /runs/{run_id}/finish  (no body)        -> RunRecord
-#
+#   GET  /stats?experiment=heldout               -> numbers for one experiment only
 # The guard function the backend imports:
 #   guard/guard.py:  def check(tool_call: ToolCall) -> Decision
 class StartRunRequest(BaseModel):
@@ -75,7 +75,7 @@ class StartRunRequest(BaseModel):
 class StartRunResponse(BaseModel):
     run_id: str
     user_request: str                  # the task prompt the agent should act on
-
+    experiment: Optional[str] = None  
 
 class ToolCallResponse(BaseModel):
     decision: Decision

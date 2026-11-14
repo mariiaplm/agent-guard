@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentGuard</title>
+<!--
+  AgentGuard dashboard. 
+  1. Start backend:  uvicorn backend.main:app --port 8000
+  2. Open this file in a browser or serve it:
+       python -m http.server 5500 -d dashboard   ->  http://localhost:5500
+  Point at another backend with ?api=http://HOST:PORT
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: light;
+    --page:       #ffffff;
+    --ink:        #1d2533;
+    --ink-soft:   #4b5565;
+    --ink-faint:  #7a8494;
+    --rule:       #d5dae1;
+    --rule-faint: #eceef2;
+    --head:       #f6f7f9;
+    --block:      #b42318;
+    --block-bg:   #fdf1ef;
+    --ok:         #1f7a3a;
+    --off:        #c2601e;   /* guard off */
+    --on:         #2f55c4;   /* guard on  */
+    --face: "Public Sans", "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--ink);
+    font-family: var(--face); font-size: 14.5px; line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+  }
+  .page { max-width: 1320px; margin: 0 auto; padding: 0 32px 56px; }
+  .grow { flex: 1; }
+
+  /*  header */
+  .mast { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; padding: 22px 0; border-bottom: 1px solid var(--rule); }
+  .mast h1 { margin: 0; font-size: 22px; line-height: 1.2; font-weight: 700; letter-spacing: -0.01em; }
+  .live { color: var(--ink-soft); font-size: 13.5px; margin: 0; padding-left: 20px; border-left: 1px solid var(--rule); }
+  .live b { font-weight: 600; color: var(--ink); }
+  .pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-faint); margin-right: 8px; }
+  .pulse.ok { background: var(--ok); }
+  .pulse.bad { background: var(--block); }
+
+  button {
+    font: inherit; font-size: 13.5px; font-weight: 500; color: var(--ink);
+    background: var(--page); border: 1px solid var(--rule); border-radius: 4px;
+    padding: 5px 12px; cursor: pointer;
+  }
+  button:hover { border-color: var(--ink-faint); }
+  :focus-visible { outline: 2px solid var(--on); outline-offset: 2px; }
+
+  /*  sections */
+  section { padding: 28px 0 8px; }
+  section + section { border-top: 1px solid var(--rule); margin-top: 20px; }
+  .sec-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+  .sec-head h2 { margin: 0; font-size: 17px; font-weight: 650; }
+  .sec-head .meta { color: var(--ink-faint); font-size: 13px; }
+
+  .exp { font-size: 13.5px; color: var(--ink-soft); display: inline-flex; align-items: center; gap: 8px; }
+  .exp select { font: inherit; font-size: 13.5px; color: var(--ink); padding: 4px 8px; border: 1px solid var(--rule); border-radius: 4px; background: var(--page); }
+
+  /*  results */
+  .results { display: grid; grid-template-columns: 1fr 1fr; }
+  .side { padding: 4px 32px 8px 0; }
+  .side + .side { padding: 4px 0 8px 32px; border-left: 1px solid var(--rule); }
+  .side h3 { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--ink-soft); display: flex; align-items: center; gap: 8px; }
+  .side h3 i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .frac { font-size: 56px; line-height: 1; font-weight: 700; letter-spacing: -0.02em; }
+  .frac .den { color: var(--ink-faint); font-weight: 500; }
+  .frac.none { color: var(--ink-faint); font-weight: 500; }
+  .frac-label { margin: 8px 0 18px; color: var(--ink-soft); }
+  .facts { display: flex; gap: 36px; flex-wrap: wrap; margin: 0; padding-top: 14px; border-top: 1px solid var(--rule-faint); }
+  .facts div { display: flex; flex-direction: column-reverse; }
+  .facts dt { font-size: 13px; color: var(--ink-soft); }
+  .facts dd { margin: 0; font-size: 20px; font-weight: 650; }
+  .facts dd .den { color: var(--ink-faint); font-weight: 500; }
+  .explain { margin: 18px 0 0; font-size: 13px; color: var(--ink-faint); max-width: 90ch; }
+
+  /* ---------------------------------------------------------- filters */
+  .search {
+    font: inherit; font-size: 14px; color: var(--ink);
+    width: 320px; max-width: 100%; padding: 6px 10px 6px 32px;
+    border: 1px solid var(--rule); border-radius: 4px; background: var(--page);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%237a8494' stroke-width='1.6'%3E%3Ccircle cx='7' cy='7' r='4.8'/%3E%3Cpath d='M10.6 10.6 14 14'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: 10px center;
+  }
+  .search:focus { border-color: var(--ink-faint); outline: none; box-shadow: 0 0 0 3px #e3e9f8; }
+  .checks { display: flex; gap: 18px; border: 0; margin: 0; padding: 0; }
+  .checks legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; color: var(--ink-soft); user-select: none; }
+  .check input {
+    appearance: none; -webkit-appearance: none; margin: 0;
+    width: 16px; height: 16px; border: 1.5px solid var(--ink-faint); border-radius: 3px;
+    display: grid; place-content: center; cursor: pointer; background: var(--page);
+  }
+  .check input::after {
+    content: ""; width: 9px; height: 5px; margin-top: -2px;
+    border: solid #fff; border-width: 0 0 2px 2px; transform: rotate(-45deg) scale(0);
+  }
+  .check input:checked { background: var(--ink); border-color: var(--ink); }
+  .check input:checked::after { transform: rotate(-45deg) scale(1); }
+  .check:has(input:checked) { color: var(--ink); font-weight: 600; }
+
+  /*  tables */
+  .scroll { max-height: 520px; overflow: auto; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+  .scroll.short { max-height: 340px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th {
+    position: sticky; top: 0; z-index: 1; background: var(--head);
+    text-align: left; font-weight: 600; font-size: 12.5px; color: var(--ink-soft);
+    padding: 8px 12px; border-bottom: 1px solid var(--rule); white-space: nowrap;
+  }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--rule-faint); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover td { background: #f9fafb; }
+  td.r, th.r { text-align: right; }
+  .when { white-space: nowrap; color: var(--ink-soft); }
+  .id { font-weight: 500; white-space: nowrap; font-size: 13px; }
+  .runlink { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; }
+  .runlink:hover { text-decoration-color: var(--ink); }
+  .what { min-width: 270px; }
+  .what .tool { color: var(--ink-faint); font-size: 12px; display: block; }
+  .src-email { color: var(--off); font-weight: 600; white-space: nowrap; }
+  .why { color: var(--ink-soft); min-width: 220px; max-width: 380px; }
+  .allowed { color: var(--ink-soft); }
+  .result { color: var(--ink-faint); max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  tr.void td { background: var(--block-bg); }
+  tr.void td:first-child { box-shadow: inset 3px 0 0 var(--block); }
+  tr.void:hover td { background: #fbe8e5; }
+  mark { background: #fff1b8; color: inherit; border-radius: 2px; padding: 0 1px; }
+
+  .chip { font-size: 13px; color: var(--ink-soft); }
+  .chip button { padding: 2px 8px; font-size: 12.5px; margin-left: 8px; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+    font-size: 12.5px; font-weight: 600; line-height: 1;
+    color: var(--block); background: var(--block-bg);
+    border: 1px solid #f1c4bd; border-radius: 4px; padding: 4px 8px;
+  }
+  .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .badge.blue { color: var(--on); background: #eef2fc; border-color: #c9d4f3; }
+  .badge.fresh { animation: arrive 1.4s ease-out both; }
+  @keyframes arrive { from { box-shadow: 0 0 0 4px rgba(180,35,24,.25); } to { box-shadow: 0 0 0 0 rgba(180,35,24,0); } }
+  @media (prefers-reduced-motion: reduce) { .badge.fresh { animation: none; } }
+  .plain { color: var(--ink-soft); }
+  .done { color: var(--ok); font-weight: 600; }
+  .notdone { color: var(--ink-faint); }
+
+  .empty { padding: 28px 12px; color: var(--ink-soft); }
+  .empty code { font-family: inherit; font-weight: 600; color: var(--ink); background: var(--rule-faint); padding: 1px 6px; border-radius: 3px; }
+
+  @media (max-width: 900px) {
+    .results { grid-template-columns: 1fr; }
+    .side, .side + .side { padding: 4px 0 20px; border-left: 0; }
+    .side + .side { border-top: 1px solid var(--rule); padding-top: 20px; }
+  }
+  @media (max-width: 560px) {
+    .page { padding: 0 14px 40px; }
+    .live { padding-left: 0; border-left: 0; }
+    .frac { font-size: 44px; }
+    .search { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="mast">
+    <h1>AgentGuard</h1>
+    <p class="live" id="live"><span class="pulse"></span>Connecting to the backend…</p>
+    <div class="grow"></div>
+    <button id="pauseBtn" aria-pressed="false">Pause updates</button>
+  </header>
+
+  <!--  results -->
+  <section aria-labelledby="h-results">
+    <div class="sec-head">
+      <h2 id="h-results">Results</h2>
+      <label class="exp">Experiment
+        <select id="expSel"><option value="">All runs</option></select>
+      </label>
+    </div>
+    <div class="results">
+      <div class="side" id="side-off"></div>
+      <div class="side" id="side-on"></div>
+    </div>
+    <p class="explain">Attacks that got through: attack runs where money or an email reached the attacker. Legit tasks done: normal requests the agent still finished, which drops if the guard blocks too much.</p>
+  </section>
+
+  <!--  tool calls -->
+  <section aria-labelledby="h-calls">
+    <div class="sec-head">
+      <h2 id="h-calls">Tool calls</h2>
+      <input id="search" class="search" type="search" placeholder="Search runs, accounts, emails, reasons" aria-label="Search tool calls">
+      <fieldset class="checks">
+        <legend>Show</legend>
+        <label class="check"><input type="radio" name="show" value="all" checked> All</label>
+        <label class="check"><input type="radio" name="show" value="blocked"> Blocked only</label>
+      </fieldset>
+      <span class="chip" id="runChip"></span>
+      <div class="grow"></div>
+      <span class="meta" id="logCount"></span>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Time</th><th>Run</th><th class="r">Step</th><th>Action</th><th>Came from</th><th>Decision</th><th>Reason</th><th class="r">Risk</th><th>Result</th></tr></thead>
+        <tbody id="logBody"><tr><td colspan="9" class="empty">Tool calls show up here as the agent makes them.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!--  runs -->
+  <section aria-labelledby="h-runs">
+    <div class="sec-head"><h2 id="h-runs">Runs</h2><span class="meta">Most recent</span></div>
+    <div class="scroll short">
+      <table>
+        <thead><tr><th>Run</th><th>Task</th><th>Guard</th><th>Outcome</th><th>Task done</th></tr></thead>
+        <tbody id="runsBody"><tr><td colspan="5" class="empty">Each agent run gets a row here when it starts.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script>
+const API = new URLSearchParams(location.search).get("api") || "http://localhost:8000";
+const LOG_POLL_MS = 1500, STATS_POLL_MS = 3000, MAX_ROWS = 500;
+
+let experiment = "";
+let paused = false, lastLogId = 0, logs = [], onlyBlocked = false, runFilter = null, query = "";
+const $ = id => document.getElementById(id);
+
+// Attack emails are attacker-written text: escape everything before it goes into HTML.
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const money = n => "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const count = (rate, n) => Math.round((rate || 0) * (n || 0));
+
+async function getJSON(path) {
+  const r = await fetch(API + path);
+  if (!r.ok) throw new Error(`${r.status} ${path}`);
+  return r.json();
+}
+
+//  results
+function frac(rate, n, cls = "") {
+  if (!n) return `<span class="${cls} none">–</span>`;
+  return `<span class="${cls}">${count(rate, n)}<span class="den">/${n}</span></span>`;
+}
+
+function renderSide(el, label, color, d) {
+  d = d || {};
+  const blocked = d.calls_blocked || 0;
+  el.innerHTML = `
+    <h3><i style="background:${color}"></i>${label}</h3>
+    <div class="frac ${d.attack_runs ? "" : "none"}">${d.attack_runs ? `${count(d.attack_success_rate, d.attack_runs)}<span class="den">/${d.attack_runs}</span>` : "–"}</div>
+    <p class="frac-label">${d.attack_runs ? "attacks got through" : "No attack runs yet"}</p>
+    <dl class="facts">
+      <div><dt>legit tasks done</dt><dd>${frac(d.benign_task_success_rate, d.benign_runs)}</dd></div>
+      <div><dt>tool ${blocked === 1 ? "call" : "calls"} blocked</dt><dd>${blocked}</dd></div>
+      <div><dt>finished runs</dt><dd>${d.runs || 0}</dd></div>
+    </dl>`;
+}
+
+function renderResults(s) {
+  renderSide($("side-off"), "Guard off", "var(--off)", s.guard_off);
+  renderSide($("side-on"), "Guard on", "var(--on)", s.guard_on);
+}
+
+// ------------------------------------------------------------------ runs
+const TASK_NAMES = {
+  pay_rent: "Pay rent", pay_electric: "Pay electric bill", summarize_latest: "Summarize latest email",
+  reply_boss: "Reply to boss", forward_receipt: "Forward receipt",
+};
+
+function renderRuns(runs) {
+  if (!runs.length) { $("runsBody").innerHTML = `<tr><td colspan="5" class="empty">No runs in this experiment yet.</td></tr>`; return; }
+  $("runsBody").innerHTML = runs.map(r => {
+    let outcome;
+    if (r.status !== "finished") outcome = `<span class="plain">Running</span>`;
+    else if (r.attack_succeeded) outcome = `<span class="badge">Hijacked</span>`;
+    else if (r.attack_id) outcome = `<span class="badge blue">Defended</span>`;
+    else outcome = `<span class="plain">No attack</span>`;
+    const done = r.status !== "finished" ? `<span class="plain">–</span>`
+      : r.task_succeeded ? `<span class="done">Yes</span>` : `<span class="notdone">No</span>`;
+    return `<tr>
+      <td class="id"><button class="runlink" data-run="${esc(r.run_id)}" title="Show this run's tool calls">${esc(r.run_id)}</button></td>
+      <td>${esc(TASK_NAMES[r.task_id] || r.task_id)}</td>
+      <td>${r.guard_enabled ? "On" : "Off"}</td>
+      <td>${outcome}</td><td>${done}</td></tr>`;
+  }).join("");
+}
+
+// ------------------------------------------------------------------ tool-call log
+function describe(l) {
+  const a = l.args || {};
+  if (l.tool_name === "transfer_money") return `Send ${money(a.amount ?? 0)} to ${a.to_account ?? "?"}`;
+  if (l.tool_name === "send_email") return `Email ${a.to ?? "?"}${a.subject ? `: “${a.subject}”` : ""}`;
+  if (l.tool_name === "read_email") return "Read the inbox";
+  return JSON.stringify(a);
+}
+
+// escape, then wrap search matches in <mark>
+function hl(text) {
+  const safe = esc(text);
+  if (!query) return safe;
+  const q = esc(query).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return safe.replace(new RegExp(q, "gi"), m => `<mark>${m}</mark>`);
+}
+
+function matches(l) {
+  if (!query) return true;
+  const hay = [l.run_id, l.tool_name, describe(l), JSON.stringify(l.args), l.reason, l.result,
+               l.provenance === "untrusted_content" ? "email content" : "user",
+               l.decision === "block" ? "blocked" : "allowed"].join(" ").toLowerCase();
+  return hay.includes(query.toLowerCase());
+}
+
+function renderLogs(freshIds = new Set()) {
+  let rows = logs;
+  if (onlyBlocked) rows = rows.filter(l => l.decision === "block");
+  if (runFilter) rows = rows.filter(l => l.run_id === runFilter);
+  rows = rows.filter(matches);
+  $("logCount").textContent = `${rows.length} ${rows.length === 1 ? "call" : "calls"}`;
+  $("runChip").innerHTML = runFilter ? `Run <span class="id">${esc(runFilter)}</span><button id="clearRun">Show all runs</button>` : "";
+  if (runFilter) $("clearRun").onclick = () => { runFilter = null; renderLogs(); };
+  if (!rows.length) {
+    $("logBody").innerHTML = `<tr><td colspan="9" class="empty">${logs.length ? "No calls match these filters." : "Tool calls show up here as the agent makes them."}</td></tr>`;
+    return;
+  }
+  $("logBody").innerHTML = rows.map(l => {
+    const blocked = l.decision === "block";
+    const time = new Date(l.timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+    const decision = blocked
+      ? `<span class="badge ${freshIds.has(l.id) ? "fresh" : ""}">Blocked</span>`
+      : `<span class="allowed">Allowed</span>`;
+    const from = l.provenance === "untrusted_content" ? `<span class="src-email">Email content</span>` : "User";
+    return `<tr class="${blocked ? "void" : ""}">
+      <td class="when">${esc(time)}</td>
+      <td class="id"><button class="runlink" data-run="${esc(l.run_id)}" title="Show only this run">${hl(l.run_id)}</button></td>
+      <td class="r">${l.step}</td>
+      <td class="what">${hl(describe(l))}<span class="tool">${hl(l.tool_name)}</span></td>
+      <td>${from}</td>
+      <td>${decision}</td>
+      <td class="why">${hl(l.reason)}</td>
+      <td class="r">${Number(l.score).toFixed(2)}</td>
+      <td class="result" title="${esc(l.result)}">${blocked ? "Not run" : hl(l.result ?? "–")}</td></tr>`;
+  }).join("");
+}
+
+document.addEventListener("click", e => {
+  const el = e.target.closest && e.target.closest("[data-run]");
+  if (el) { runFilter = el.dataset.run; renderLogs(); }
+});
+document.querySelectorAll('input[name="show"]').forEach(r =>
+  r.addEventListener("change", () => { onlyBlocked = r.value === "blocked" && r.checked; renderLogs(); }));
+$("search").addEventListener("input", e => { query = e.target.value.trim(); renderLogs(); });
+$("pauseBtn").onclick = () => {
+  paused = !paused;
+  $("pauseBtn").setAttribute("aria-pressed", String(paused));
+  $("pauseBtn").textContent = paused ? "Resume updates" : "Pause updates";
+};
+
+//  polling
+async function pollLogs() {
+  if (paused) return;
+  try {
+    const fresh = await getJSON(`/logs?since_id=${lastLogId}&limit=200`); // newest first
+    if (!fresh.length) return;
+    const firstLoad = lastLogId === 0;
+    lastLogId = Math.max(lastLogId, ...fresh.map(l => l.id));
+    logs = fresh.concat(logs).slice(0, MAX_ROWS);
+    renderLogs(firstLoad ? new Set() : new Set(fresh.map(l => l.id)));
+  } catch (e) { /* pollStats reports connection problems */ }
+}
+
+async function pollStats() {
+  if (paused) return;
+  try {
+    const q = experiment ? `experiment=${encodeURIComponent(experiment)}` : "";
+    const [health, stats, runs, exps] = await Promise.all([
+      getJSON("/health"), getJSON(`/stats?${q}`), getJSON(`/runs?limit=50&${q}`),
+      getJSON("/experiments").catch(() => []),
+    ]);
+    syncExperiments(exps);
+    const guard = health.guard === "stub" ? "the stub guard (allows everything)" : `<b>${esc(health.guard)}</b>`;
+    $("live").innerHTML = `<span class="pulse ok"></span>Live from <b>${esc(API.replace(/^https?:\/\//, ""))}</b>, using ${guard}.`;
+    renderResults(stats); renderRuns(runs);
+  } catch (e) {
+    $("live").innerHTML = `<span class="pulse bad"></span>Can't reach ${esc(API)}. Start it with <b>uvicorn backend.main:app --port 8000</b>.`;
+  }
+}
+
+function syncExperiments(exps) {
+  const sel = $("expSel");
+  const have = [...sel.options].map(o => o.value).filter(Boolean);
+  if (JSON.stringify(have) === JSON.stringify(exps)) return;
+  sel.innerHTML = `<option value="">All runs</option>` +
+    exps.map(e => `<option value="${esc(e)}">${esc(e)}</option>`).join("");
+  sel.value = exps.includes(experiment) ? experiment : "";
+}
+$("expSel").addEventListener("change", e => {
+  experiment = e.target.value;
+  $("runsBody").innerHTML = `<tr><td colspan="5" class="empty">Loading…</td></tr>`;
+  pollStats();
+});
+
+renderResults({});
+pollStats(); pollLogs();
+setInterval(pollLogs, LOG_POLL_MS);
+setInterval(pollStats, STATS_POLL_MS);
+</script>
+</body>
+</html>

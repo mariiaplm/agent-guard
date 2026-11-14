@@ -49,6 +49,15 @@ def test_bad_inputs_dont_crash():
     assert "invalid amount" in execute(s, "transfer_money", {"to_account": "A", "amount": "lots"})
     assert "insufficient funds" in execute(s, "transfer_money", {"to_account": "A", "amount": 10**9})
 
+# new tasks should succeed
+def test_user_named_new_recipients():
+    assert PLUMBER_ACCOUNT not in KNOWN_ACCOUNTS and FRIEND_EMAIL not in KNOWN_EMAILS
+    s = create_run("t7", "pay_plumber")
+    execute(s, "transfer_money", {"to_account": PLUMBER_ACCOUNT, "amount": 90})
+    assert check_task(s) is True and s.compromised is False
+    s = create_run("t8", "email_friend")
+    execute(s, "send_email", {"to": FRIEND_EMAIL, "subject": "Late", "body": "Running late!"})
+    assert check_task(s) is True and s.compromised is False
 
 def test_all_tasks_have_requests():
     for t in TASKS.values():

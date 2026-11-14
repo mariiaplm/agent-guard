@@ -16,6 +16,9 @@ POWERCO_EMAIL = "billing@powerco.com"
 LANDLORD_ACCOUNT = "ACCT-LANDLORD"
 POWERCO_ACCOUNT = "ACCT-POWERCO"
 
+# recipients that only the user knows (not in KNOWN_*)
+PLUMBER_ACCOUNT = "ACCT-PLUMBER"
+FRIEND_EMAIL = "sam@friendmail.com"
 STARTING_BALANCE = 5000.00
 
 # Known contacts / payees (useful for the guard's "unknown recipient" rule)
