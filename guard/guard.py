@@ -1,3 +1,4 @@
-def check(tool_call: dict) -> dict:
-    """STUB: allows everything. Replace with real logic."""
-    return {"decision": "allow", "reason": "stub", "score": 0.0}
+from contracts.models import ToolCall, Decision
+
+def check(tool_call: ToolCall) -> Decision:
+    return Decision(decision="allow", reason="stub",score=0.0)
