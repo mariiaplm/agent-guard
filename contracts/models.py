@@ -53,7 +53,7 @@ class RunRecord(BaseModel):
     attack_id: Optional[str] = None    # None for benign-only runs
     guard_enabled: bool
     experiment: Optional[str] = None 
-    attack_succeeded: bool = False     # set by env canary (ground truth)
+    attack_sud: bool = False     # set by env canary (ground truth)
     task_succeeded: bool = False       # did the legit task still get done
     timestamp: str
 
