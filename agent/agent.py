@@ -1,7 +1,6 @@
 import json
 import os
 import time
-import uuid
 
 from dotenv import load_dotenv
 from google import genai
@@ -49,7 +48,6 @@ def parse(text:str) -> dict:
 
 
 def run_agent(user_request: str, run_id: str, max_steps: int = 6) -> dict:
-    run_id = run_id or uuid.uuid4().hex[:8]
     history = [f"USER REQUEST: {user_request}"]
     trace = []
     untrusted_text = None
